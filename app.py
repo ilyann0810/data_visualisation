@@ -586,11 +586,11 @@ def create_accident_concentration_analysis(df):
         if len(df_geo) == 0:
             return None
         
-        # OPTIMISATION 1: Arrondir à 3 décimales au lieu de 2 (plus précis, moins de regroupements)
+        # Arrondir à 3 décimales
         df_geo['lat_round'] = df_geo['lat'].round(3)
         df_geo['long_round'] = df_geo['long'].round(3)
         
-        # OPTIMISATION 2: Utiliser des agrégations plus simples
+        # Utiliser des agrégations plus simples
         hotspots = df_geo.groupby(['lat_round', 'long_round']).agg({
             'Num_Acc': 'count',
             'nb_tues': 'sum',
@@ -598,21 +598,21 @@ def create_accident_concentration_analysis(df):
             'score_gravite': 'mean',
             'lat': 'mean',
             'long': 'mean',
-            'dep': 'first',  # Plus rapide que mode()
-            'com': 'first' if 'com' in df.columns else lambda x: ''
+            'dep': 'first',
+            'com': lambda x: x.iloc[0] if len(x) > 0 and 'com' in df.columns else ''
         }).reset_index()
         
         hotspots.columns = ['Lat_round', 'Long_round', 'Accidents', 'Décès', 'Blessés graves', 'Gravité', 'Latitude', 'Longitude', 'Département', 'Commune']
         
         # Top 20 points chauds
-        top_hotspots = hotspots.nlargest(20, 'Accidents')
+        top_hotspots = hotspots.nlargest(20, 'Accidents').reset_index(drop=True)
         
-        # OPTIMISATION 3: Créer la carte plus simplement
+        # Créer la carte plus simplement
         hot_spots_map = folium.Map(
             location=[46.603354, 1.888334],
             zoom_start=6,
             tiles='OpenStreetMap',
-            prefer_canvas=True  # Améliore les performances
+            prefer_canvas=True
         )
         
         # Légende simplifiée
@@ -629,38 +629,56 @@ def create_accident_concentration_analysis(df):
         """
         hot_spots_map.get_root().html.add_child(folium.Element(legend_html))
         
-        # OPTIMISATION 4: Simplifier les marqueurs
+        # Simplifier les marqueurs - CORRECTION ICI
         for idx, spot in top_hotspots.iterrows():
             # Couleur selon gravité
-            if spot['Gravité'] > 150:
-                color = 'darkred'
-            elif spot['Gravité'] > 100:
-                color = 'red'
-            elif spot['Gravité'] > 50:
-                color = 'orange'
+            gravite = spot['Gravité']
+            if pd.notna(gravite):
+                if gravite > 150:
+                    color = 'darkred'
+                elif gravite > 100:
+                    color = 'red'
+                elif gravite > 50:
+                    color = 'orange'
+                else:
+                    color = 'yellow'
             else:
-                color = 'yellow'
+                color = 'gray'
             
-            # Nom de localisation simplifié
-            location_name = f"{spot['Commune']} ({spot['Département']})" if spot['Commune'] and str(spot['Commune']) != 'nan' else f"Dép. {spot['Département']}"
+            # Nom de localisation simplifié - CORRECTION ICI
+            commune = spot['Commune']
+            dept = spot['Département']
+            
+            # Convertir en string et nettoyer
+            commune_str = str(commune) if pd.notna(commune) and str(commune) != 'nan' and str(commune) != '' else None
+            dept_str = str(dept) if pd.notna(dept) else 'N/A'
+            
+            if commune_str:
+                location_name = f"{commune_str} ({dept_str})"
+            else:
+                location_name = f"Dép. {dept_str}"
             
             # Popup HTML simplifié
+            accidents = int(spot['Accidents']) if pd.notna(spot['Accidents']) else 0
+            deces = int(spot['Décès']) if pd.notna(spot['Décès']) else 0
+            gravite_str = f"{gravite:.0f}" if pd.notna(gravite) else 'N/A'
+            
             popup_html = f"""
             <b>⚠️ Point #{idx+1}</b><br>
             📍 {location_name}<br>
-            🚨 {int(spot['Accidents'])} accidents<br>
-            💀 {int(spot['Décès'])} décès<br>
-            ⚠️ Gravité: {spot['Gravité']:.0f}
+            🚨 {accidents} accidents<br>
+            💀 {deces} décès<br>
+            ⚠️ Gravité: {gravite_str}
             """
             
             coords = [spot['Latitude'], spot['Longitude']]
             
-            # UN SEUL marqueur par point (au lieu de cercle + marker)
+            # UN SEUL marqueur par point
             folium.CircleMarker(
                 location=coords,
-                radius=8 + (spot['Accidents'] / 10),  # Taille dynamique mais raisonnable
+                radius=8 + (accidents / 10) if accidents > 0 else 8,
                 popup=folium.Popup(popup_html, max_width=200),
-                tooltip=f"#{idx+1}: {int(spot['Accidents'])} accidents",
+                tooltip=f"#{idx+1}: {accidents} accidents",
                 color=color,
                 fill=True,
                 fillColor=color,
