@@ -8,7 +8,9 @@ import folium
 from streamlit_folium import st_folium
 from datetime import datetime, timedelta
 import warnings
-import time  # Ajouter cette import
+import time
+import hashlib
+import uuid  # AJOUTER CETTE LIGNE
 warnings.filterwarnings('ignore')
 
 # ============================================================================
@@ -410,7 +412,8 @@ def create_france_map(df):
         m = folium.Map(
             location=[46.603354, 1.888334],
             zoom_start=6,
-            tiles='OpenStreetMap'
+            tiles='OpenStreetMap',
+            prefer_canvas=True  # AJOUTER CETTE LIGNE
         )
         
         # Ajouter une heatmap
@@ -452,6 +455,7 @@ def create_france_map(df):
         return m
     
     except Exception as e:
+        st.error(f"Erreur création carte: {e}")
         return None
 
 def create_department_analysis(df):
@@ -1362,9 +1366,9 @@ def main():
                     
                     if france_map is not None:
                         try:
-                            # Créer une clé vraiment unique
-                            data_signature = f"{len(df_geo)}_{int(df_geo['Num_Acc'].sum())}_{hash(tuple(df_geo.index[:10]))}"
-                            map_key = f"heatmap_{abs(hash(data_signature))}_{st.session_state.get('map_counter', 0)}"
+                            # SOLUTION ROBUSTE : Utiliser UUID au lieu de hash
+                            unique_id = str(uuid.uuid4())[:8]
+                            map_key = f"heatmap_{unique_id}_{st.session_state.get('map_counter', 0)}"
                             
                             # Afficher avec la clé unique
                             st_folium(france_map, width=1000, height=600, returned_objects=[], key=map_key)
@@ -1537,13 +1541,9 @@ def main():
         
         if hotspots_map:
             try:
-                # Créer une clé unique pour la carte des points noirs
-                df_for_hotspots = df_filtered.dropna(subset=['lat', 'long']) if 'lat' in df_filtered.columns else pd.DataFrame()
-                if len(df_for_hotspots) > 0:
-                    hotspots_signature = f"{len(df_for_hotspots)}_{int(df_for_hotspots['Num_Acc'].sum())}_{hash(tuple(df_for_hotspots.index[:10]))}"
-                    hotspots_key = f"hotspots_{abs(hash(hotspots_signature))}_{st.session_state.get('map_counter', 0)}"
-                else:
-                    hotspots_key = f"hotspots_empty_{st.session_state.get('map_counter', 0)}"
+                # SOLUTION ROBUSTE : Utiliser UUID au lieu de hash complexe
+                unique_id = str(uuid.uuid4())[:8]
+                hotspots_key = f"hotspots_{unique_id}_{st.session_state.get('map_counter', 0)}"
                 
                 # Afficher avec la clé unique
                 st_folium(hotspots_map, width=1000, height=600, returned_objects=[], key=hotspots_key)
@@ -1769,7 +1769,6 @@ def main():
             📱 Réseaux sociaux ciblés  
             🎮 Simulateurs réalité virtuelle  
             🎯 Influenceurs engagés  
-            
             **ROI : 1€ investi = 150€ économisés**
             """)
             st.markdown('</div>', unsafe_allow_html=True)
